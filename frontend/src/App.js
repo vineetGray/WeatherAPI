@@ -1,113 +1,16 @@
-// import React, { useState } from 'react';
-// import axios from 'axios';
-// import './App.css';
-
-// const API_BASE_URL = process.env.REACT_APP_API_URL||'http://localhost:5000/api';
-
-// function App() {
-//   const [city, setCity] = useState('');
-//   const [weather, setWeather] = useState(null);
-//   const [loading, setLoading] = useState(false);
-//   const [error, setError] = useState('');
-
-//   const fetchWeather = async (e) => {
-//     e.preventDefault();
-//     if (!city.trim()) return;
-
-//     setLoading(true);
-//     setError('');
-//     setWeather(null);
-
-//     try {
-//       const response = await axios.get(`${API_BASE_URL}/weather?city=${city}`);
-//       setWeather(response.data);
-//     } catch (err) {
-//       setError(err.response?.data?.error || 'Failed to fetch weather data');
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
-
-//   return (
-//     <div className="App">
-//       <div className="container">
-//         <h1>🌤️ Live Weather App</h1>
-        
-//         <form onSubmit={fetchWeather} className="search-form">
-//           <input
-//             type="text"
-//             value={city}
-//             onChange={(e) => setCity(e.target.value)}
-//             placeholder="Enter city name..."
-//             className="search-input"
-//           />
-//           <button type="submit" disabled={loading} className="search-button">
-//             {loading ? 'Searching...' : 'Get Weather'}
-//           </button>
-//         </form>
-
-//         {error && (
-//           <div className="error">
-//             ❌ {error}
-//           </div>
-//         )}
-
-//         {weather && (
-//           <div className="weather-card">
-//             <div className="weather-header">
-//               <h2>{weather.city}, {weather.country}</h2>
-//               {weather.icon && (
-//                 <img 
-//                   src={`https://openweathermap.org/img/wn/${weather.icon}@2x.png`} 
-//                   alt={weather.description}
-//                   className="weather-icon"
-//                 />
-//               )}
-//             </div>
-            
-//             <div className="weather-main">
-//               <div className="temperature">{weather.temperature}°C</div>
-//               <div className="description">
-//                 {weather.description}
-//               </div>
-//             </div>
-
-//             <div className="weather-details">
-//               <div className="detail-item">
-//                 <span className="label">Feels like:</span>
-//                 <span className="value">{weather.feels_like}°C</span>
-//               </div>
-//               <div className="detail-item">
-//                 <span className="label">Humidity:</span>
-//                 <span className="value">{weather.humidity}%</span>
-//               </div>
-//               <div className="detail-item">
-//                 <span className="label">Wind Speed:</span>
-//                 <span className="value">{weather.windSpeed} m/s</span>
-//               </div>
-//             </div>
-//           </div>
-//         )}
-//       </div>
-//     </div>
-//   );
-// }
-
-// export default App;
-
-
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import SmartSearch from './components/SmartSearch';
 import './App.css';
 
-const API_BASE_URL = 'https://weatherapi-t7rv.onrender.com/api'; // FIXED URL
+const API_BASE_URL = 'https://weatherapi-t7rv.onrender.com/api';
 
 function App() {
+  const [city, setCity] = useState('');
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searchHistory, setSearchHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
 
   // Load search history from localStorage
   useEffect(() => {
@@ -122,43 +25,36 @@ function App() {
     localStorage.setItem('weatherSearchHistory', JSON.stringify(searchHistory));
   }, [searchHistory]);
 
-  const fetchWeatherData = async (location) => {
+  const fetchWeatherData = async (cityName) => {
     setLoading(true);
     setError('');
     setWeather(null);
+    setShowHistory(false);
 
     try {
-      let url;
-      if (location.lat && location.lon) {
-        url = `${API_BASE_URL}/weather?lat=${location.lat}&lon=${location.lon}`;
-      } else {
-        url = `${API_BASE_URL}/weather?city=${encodeURIComponent(location.name)}`;
-      }
-
+      const url = `${API_BASE_URL}/weather?city=${encodeURIComponent(cityName)}`;
       const response = await axios.get(url);
       
-      // Validate response structure
       if (!response.data || !response.data.location || !response.data.current) {
         throw new Error('Invalid weather data received from server');
       }
 
       setWeather(response.data);
 
-      // Add to search history - safely access properties
+      // Add to search history
       if (response.data && response.data.location) {
         const newSearch = {
           city: response.data.location.city || 'Unknown City',
           country: response.data.location.country || 'Unknown Country',
           temperature: response.data.current?.temperature || 'N/A',
           timestamp: new Date().toISOString(),
-          coordinates: response.data.location.coordinates || {}
         };
 
         setSearchHistory(prev => {
           const filtered = prev.filter(item => 
             !(item.city === newSearch.city && item.country === newSearch.country)
           );
-          return [newSearch, ...filtered].slice(0, 8);
+          return [newSearch, ...filtered].slice(0, 5);
         });
       }
 
@@ -176,75 +72,25 @@ function App() {
     }
   };
 
-  const handleLocationSelect = (location) => {
-    if (!location || (!location.name && !location.lat)) {
-      setError('Invalid location selected');
-      return;
-    }
-    fetchWeatherData(location);
-  };
-
-  const handleGeolocation = () => {
-    if (!navigator.geolocation) {
-      setError('Geolocation is not supported by your browser');
-      return;
-    }
-
-    setLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        
-        try {
-          // Get location name from coordinates
-          const locationResponse = await axios.get(
-            `${API_BASE_URL}/location?lat=${latitude}&lon=${longitude}`
-          );
-          
-          const locationData = {
-            ...locationResponse.data,
-            lat: latitude,
-            lon: longitude
-          };
-          
-          fetchWeatherData(locationData);
-          
-        } catch (err) {
-          // If reverse geocoding fails, use coordinates directly
-          const locationData = { lat: latitude, lon: longitude };
-          fetchWeatherData(locationData);
-        }
-      },
-      (error) => {
-        let errorMessage = 'Unable to retrieve your location';
-        
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage = 'Location access denied. Please enable location permissions.';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMessage = 'Location information unavailable.';
-            break;
-          case error.TIMEOUT:
-            errorMessage = 'Location request timed out.';
-            break;
-          default:
-            errorMessage = 'An unknown error occurred.';
-            break;
-        }
-        
-        setError(errorMessage);
-        setLoading(false);
-      }
-    );
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (!city.trim()) return;
+    fetchWeatherData(city);
   };
 
   const handleClearError = () => {
     setError('');
   };
 
-  const handleClearHistory = () => {
+  const handleSelectFromHistory = (selectedCity) => {
+    setCity(selectedCity);
+    setShowHistory(false);
+    fetchWeatherData(selectedCity);
+  };
+
+  const clearSearchHistory = () => {
     setSearchHistory([]);
+    setShowHistory(false);
   };
 
   // Safe weather data access
@@ -272,27 +118,55 @@ function App() {
         {/* Header */}
         <header className="app-header">
           <div className="header-content">
-            <div className="header-title">
-              <h1>🌤️ WeatherSphere</h1>
-              <p>Smart weather search with location suggestions</p>
-            </div>
-            <button 
-              onClick={handleGeolocation}
-              className="location-btn"
-              disabled={loading}
-              title="Use my current location"
-            >
-              📍 Current Location
-            </button>
+            <h1>🌤️ WeatherAPP</h1>
+            <p>Get real-time weather information</p>
           </div>
         </header>
 
-        {/* Smart Search Section */}
+        {/* Search Section */}
         <section className="search-section">
-          <SmartSearch 
-            onLocationSelect={handleLocationSelect}
-            loading={loading}
-          />
+          <div className="search-container">
+            <form onSubmit={handleSearch} className="search-form">
+              <div className="search-input-container">
+                <input
+                  type="text"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  onFocus={() => setShowHistory(true)}
+                  placeholder="Enter city name"
+                  className="search-input"
+                />
+                <button type="submit" disabled={loading} className="search-button">
+                  {loading ? '⏳' : '🔍'}
+                </button>
+              </div>
+            </form>
+
+            {/* Search History Dropdown */}
+            {showHistory && searchHistory.length > 0 && (
+              <div className="search-history-dropdown">
+                <div className="history-header">
+                  <span>Recent Searches</span>
+                  <button onClick={clearSearchHistory} className="clear-history-btn">
+                    Clear All
+                  </button>
+                </div>
+                {searchHistory.map((item, index) => (
+                  <div
+                    key={index}
+                    className="history-item"
+                    onClick={() => handleSelectFromHistory(item.city)}
+                  >
+                    <div className="history-city">
+                      <span className="city-name">{item.city}</span>
+                      <span className="country-name">{item.country}</span>
+                    </div>
+                    <div className="history-temp">{item.temperature}°C</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </section>
 
         {/* Error Display */}
@@ -316,7 +190,14 @@ function App() {
         {/* Loading State */}
         {loading && (
           <div className="loading-state">
-            <div className="loading-spinner"></div>
+            <div className="weather-loader">
+              <div className="cloud"></div>
+              <div className="rain">
+                <div className="drop"></div>
+                <div className="drop"></div>
+                <div className="drop"></div>
+              </div>
+            </div>
             <p>Searching for weather data...</p>
           </div>
         )}
@@ -326,7 +207,10 @@ function App() {
           <div className="weather-results">
             <div className="weather-card">
               <div className="weather-header">
-                <h2>{weatherData.city}, {weatherData.country}</h2>
+                <div className="location-info">
+                  <h2>{weatherData.city}</h2>
+                  <p className="country">{weatherData.country}</p>
+                </div>
                 <div className="current-temp">
                   {weatherData.temperature}°C
                 </div>
@@ -338,80 +222,51 @@ function App() {
                     src={weatherData.iconUrl} 
                     alt={weatherData.description}
                     className="weather-icon"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
                   />
                 )}
-                <div className="weather-desc">
-                  {weatherData.description}
+                <div className="weather-info">
+                  <div className="weather-desc">{weatherData.description}</div>
+                  <div className="feels-like">Feels like {weatherData.feels_like}°C</div>
                 </div>
               </div>
 
-              <div className="weather-details">
-                <div className="detail-item">
-                  <span>Feels like</span>
-                  <span>{weatherData.feels_like}°C</span>
+              <div className="weather-stats">
+                <div className="stat-item">
+                  <div className="stat-icon">💧</div>
+                  <div className="stat-info">
+                    <div className="stat-value">{weatherData.humidity}%</div>
+                    <div className="stat-label">Humidity</div>
+                  </div>
                 </div>
-                <div className="detail-item">
-                  <span>Humidity</span>
-                  <span>{weatherData.humidity}%</span>
+                <div className="stat-item">
+                  <div className="stat-icon">💨</div>
+                  <div className="stat-info">
+                    <div className="stat-value">{weatherData.windSpeed} m/s</div>
+                    <div className="stat-label">Wind</div>
+                  </div>
                 </div>
-                <div className="detail-item">
-                  <span>Wind</span>
-                  <span>{weatherData.windSpeed} m/s</span>
-                </div>
-                <div className="detail-item">
-                  <span>Pressure</span>
-                  <span>{weatherData.pressure} hPa</span>
+                <div className="stat-item">
+                  <div className="stat-icon">🔽</div>
+                  <div className="stat-info">
+                    <div className="stat-value">{weatherData.pressure} hPa</div>
+                    <div className="stat-label">Pressure</div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Search History */}
-        {searchHistory.length > 0 && !weather && !loading && (
-          <div className="search-history">
-            <h3>Recent Searches</h3>
-            <div className="history-list">
-              {searchHistory.map((item, index) => (
-                <div
-                  key={index}
-                  className="history-item"
-                  onClick={() => handleLocationSelect({ name: item.city })}
-                >
-                  <span className="history-city">{item.city}, {item.country}</span>
-                  <span className="history-temp">{item.temperature}°C</span>
-                </div>
-              ))}
-            </div>
-            <button 
-              onClick={handleClearHistory}
-              className="clear-history"
-            >
-              Clear History
-            </button>
           </div>
         )}
 
         {/* Empty State */}
-        {!weather && !loading && !error && searchHistory.length === 0 && (
+        {!weather && !loading && !error && (
           <div className="empty-state">
-            <div className="empty-icon">🔍</div>
-            <h3>Start Searching</h3>
-            <p>Use the search above to find weather for any location worldwide</p>
-            <div className="search-tips">
-              <div className="tip">💡 Try searching for cities, countries, or coordinates</div>
-              <div className="tip">📍 Use the location button for your current weather</div>
+            <div className="empty-illustration">
+              <div className="sun"></div>
+              <div className="cloud"></div>
             </div>
           </div>
         )}
 
-        {/* Footer */}
-        <footer className="app-footer">
-          <p>Powered by OpenWeatherMap • Built with React & Node.js</p>
-        </footer>
       </div>
     </div>
   );
